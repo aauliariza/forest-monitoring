@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # 1. Broker MQTT (Middleware)
+  broker:
+    image: eclipse-mosquitto:2
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"  # Port MQTT standar
+      - "9001:9001"  # Port MQTT via WebSocket
+    volumes:
+      - ./broker_config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+  # 2. Database PostgreSQL (Penyimpanan)
+  db:
+    image: postgres:14
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: forest_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - forest-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d forest_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Dashboard Service (Backend API + Subscriber)
+  dashboard_service:
+    build:
+      context: ./dashboard_service
+      dockerfile: Dockerfile
+    container_name: dashboard-service
+    ports:
+      - "8000:80"  # API accessible on port 8000
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_started
+    environment:
+      DATABASE_URL: "postgresql://admin:password123@db:5432/forest_db"
+      MQTT_BROKER_HOST: "broker"
+      MQTT_BROKER_PORT: "1883"
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+  # 4. Sensor Nodes (Publishers)
+  # Sensor Node 1 - Sektor 1A
+  sensor_node_1:
+    build:
+      context: ./sensor_node
+      dockerfile: Dockerfile
+    container_name: sensor-area-01
+    depends_on:
+      - broker
+    environment:
+      MQTT_BROKER_HOST: "broker"
+      SENSOR_ID: "sensor-area-01"
+      LOCATION: "Sektor 1A"
+      SAMPLE_INTERVAL: "3"
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+  # Sensor Node 2 - Sektor 2B
+  sensor_node_2:
+    build:
+      context: ./sensor_node
+      dockerfile: Dockerfile
+    container_name: sensor-area-02
+    depends_on:
+      - broker
+    environment:
+      MQTT_BROKER_HOST: "broker"
+      SENSOR_ID: "sensor-area-02"
+      LOCATION: "Sektor 2B"
+      SAMPLE_INTERVAL: "3"
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+  # Sensor Node 3 - Pos Pantau 3
+  sensor_node_3:
+    build:
+      context: ./sensor_node
+      dockerfile: Dockerfile
+    container_name: sensor-area-03
+    depends_on:
+      - broker
+    environment:
+      MQTT_BROKER_HOST: "broker"
+      SENSOR_ID: "sensor-area-03"
+      LOCATION: "Pos Pantau 3"
+      SAMPLE_INTERVAL: "3"
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+  # 5. Web Dashboard (Frontend)
+  web_dashboard:
+    build:
+      context: ./web_dashboard
+      dockerfile: Dockerfile
+    container_name: web-dashboard
+    ports:
+      - "3000:80"  # Dashboard accessible on port 3000
+    depends_on:
+      - dashboard_service
+    networks:
+      - forest-network
+    restart: unless-stopped
+
+# Networks
+networks:
+  forest-network:
+    driver: bridge
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local

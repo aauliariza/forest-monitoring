@@ -1,0 +1,12 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install library
+RUN pip install --no-cache-dir paho-mqtt==2.1.0
+
+# Salin script simulasi sensor
+COPY sensor.py .
+
+# Perintah default untuk menjalankan sensor
+CMD ["python", "sensor.py"]

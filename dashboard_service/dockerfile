@@ -1,0 +1,24 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependensi sistem yang diperlukan untuk psycopg2
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependensi Python
+RUN pip install --no-cache-dir \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
+    paho-mqtt==2.1.0 \
+    sqlalchemy==2.0.23 \
+    psycopg2-binary==2.9.9 \
+    websockets==12.0
+
+# Salin semua file dari folder ini ke container
+COPY . .
+
+# Jalankan server API
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]

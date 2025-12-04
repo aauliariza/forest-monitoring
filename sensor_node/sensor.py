@@ -3,6 +3,7 @@
 """
 Sensor Node Publisher - Simulasi Sensor Kebakaran Hutan
 Mengirimkan data suhu, kelembaban, dan asap ke MQTT Broker
+Setiap sensor mengirim tipe data spesifik sesuai jenisnya
 """
 
 import paho.mqtt.client as mqtt
@@ -16,8 +17,9 @@ from datetime import datetime
 # Konfigurasi dari environment variables
 BROKER_HOST = os.getenv('MQTT_BROKER_HOST', 'broker')
 BROKER_PORT = 1883
-SENSOR_ID = os.getenv('SENSOR_ID', 'sensor-area-01')
-LOCATION = os.getenv('LOCATION', 'Sektor 1A')
+SENSOR_ID = os.getenv('SENSOR_ID', 'temp-01')
+SENSOR_TYPE = os.getenv('SENSOR_TYPE', 'temperature')  # temperature, humidity, smoke
+LOCATION = os.getenv('LOCATION', 'Hutan Lindung Area 1')
 TOPIC = "sensors/telemetry"
 INTERVAL = int(os.getenv('SAMPLE_INTERVAL', '3'))  # Interval pengiriman dalam detik
 
@@ -46,44 +48,129 @@ def on_message(client, userdata, message):
     except Exception as e:
         print(f"[{SENSOR_ID}] Error memproses command: {e}")
 
-# Fungsi untuk mensimulasikan pembacaan sensor
-def generate_sensor_data():
-    """
-    Mensimulasikan data sensor dengan nilai yang realistis
-    - Normal: suhu 20-35°C, kelembaban 40-70%, asap 0-300
-    - Warning: suhu 35-45°C, kelembaban 30-40%, asap 300-600
-    - Danger: suhu >45°C, kelembaban <30%, asap >600
-    """
+# Fungsi untuk generate data sensor Temperature
+def generate_temperature_data():
+    """Mensimulasikan pembacaan sensor suhu"""
     # Randomize kondisi (80% normal, 15% warning, 5% danger)
     rand = random.random()
     
     if rand < 0.80:  # Normal
         temperature = round(random.uniform(20, 35), 1)
-        humidity = round(random.uniform(40, 70), 1)
-        smoke = random.randint(0, 300)
         status = "normal"
     elif rand < 0.95:  # Warning
         temperature = round(random.uniform(35, 45), 1)
-        humidity = round(random.uniform(30, 40), 1)
-        smoke = random.randint(300, 600)
         status = "warning"
     else:  # Danger
         temperature = round(random.uniform(45, 60), 1)
+        status = "danger"
+    
+    return {
+        "sensor_id": SENSOR_ID,
+        "sensor_type": SENSOR_TYPE,
+        "location": LOCATION,
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "data": {
+            "temperature": temperature
+        },
+        "status": status
+    }
+
+# Fungsi untuk generate data sensor Humidity
+def generate_humidity_data():
+    """Mensimulasikan pembacaan sensor kelembaban"""
+    # Randomize kondisi (80% normal, 15% warning, 5% danger)
+    rand = random.random()
+    
+    if rand < 0.80:  # Normal (kelembaban tinggi = baik)
+        humidity = round(random.uniform(40, 70), 1)
+        status = "normal"
+    elif rand < 0.95:  # Warning
+        humidity = round(random.uniform(30, 40), 1)
+        status = "warning"
+    else:  # Danger (kelembaban rendah = bahaya)
         humidity = round(random.uniform(10, 30), 1)
+        status = "danger"
+    
+    return {
+        "sensor_id": SENSOR_ID,
+        "sensor_type": SENSOR_TYPE,
+        "location": LOCATION,
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "data": {
+            "humidity": humidity
+        },
+        "status": status
+    }
+
+# Fungsi untuk generate data sensor Smoke
+def generate_smoke_data():
+    """Mensimulasikan pembacaan sensor asap"""
+    # Randomize kondisi (80% normal, 15% warning, 5% danger)
+    rand = random.random()
+    
+    if rand < 0.80:  # Normal
+        smoke = random.randint(0, 300)
+        status = "normal"
+    elif rand < 0.95:  # Warning
+        smoke = random.randint(300, 600)
+        status = "warning"
+    else:  # Danger
         smoke = random.randint(600, 1000)
         status = "danger"
     
     return {
         "sensor_id": SENSOR_ID,
+        "sensor_type": SENSOR_TYPE,
         "location": LOCATION,
         "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "data": {
-            "temperature": temperature,
-            "humidity": humidity,
             "smoke": smoke
         },
         "status": status
     }
+
+# Fungsi untuk generate data sensor sesuai tipenya
+def generate_sensor_data():
+    """
+    Mensimulasikan data sensor berdasarkan tipe sensor
+    """
+    if SENSOR_TYPE == "temperature":
+        return generate_temperature_data()
+    elif SENSOR_TYPE == "humidity":
+        return generate_humidity_data()
+    elif SENSOR_TYPE == "smoke":
+        return generate_smoke_data()
+    else:
+        # Default: return all data
+        rand = random.random()
+        if rand < 0.80:
+            temperature = round(random.uniform(20, 35), 1)
+            humidity = round(random.uniform(40, 70), 1)
+            smoke = random.randint(0, 300)
+            status = "normal"
+        elif rand < 0.95:
+            temperature = round(random.uniform(35, 45), 1)
+            humidity = round(random.uniform(30, 40), 1)
+            smoke = random.randint(300, 600)
+            status = "warning"
+        else:
+            temperature = round(random.uniform(45, 60), 1)
+            humidity = round(random.uniform(10, 30), 1)
+            smoke = random.randint(600, 1000)
+            status = "danger"
+        
+        return {
+            "sensor_id": SENSOR_ID,
+            "sensor_type": SENSOR_TYPE,
+            "location": LOCATION,
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "data": {
+                "temperature": temperature,
+                "humidity": humidity,
+                "smoke": smoke
+            },
+            "status": status
+        }
 
 # Callback saat koneksi terputus
 def on_disconnect(client, userdata, rc):
@@ -107,7 +194,7 @@ except Exception as e:
 
 # Loop utama untuk mengirim data
 try:
-    print(f"[{SENSOR_ID}] Mulai mengirim data sensor setiap {INTERVAL} detik...")
+    print(f"[{SENSOR_ID}] Mulai mengirim data sensor {SENSOR_TYPE} setiap {INTERVAL} detik...")
     while True:
         # Generate dan kirim data sensor
         sensor_data = generate_sensor_data()
@@ -116,9 +203,12 @@ try:
         result = client.publish(TOPIC, message, qos=1)
         
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            print(f"[{SENSOR_ID}] Published: Temp={sensor_data['data']['temperature']}°C, "
-                  f"Hum={sensor_data['data']['humidity']}%, "
-                  f"Smoke={sensor_data['data']['smoke']} - Status: {sensor_data['status']}")
+            if SENSOR_TYPE == "temperature":
+                print(f"[{SENSOR_ID}] Published: Temp={sensor_data['data']['temperature']}°C - Status: {sensor_data['status']}")
+            elif SENSOR_TYPE == "humidity":
+                print(f"[{SENSOR_ID}] Published: Hum={sensor_data['data']['humidity']}% - Status: {sensor_data['status']}")
+            elif SENSOR_TYPE == "smoke":
+                print(f"[{SENSOR_ID}] Published: Smoke={sensor_data['data']['smoke']} - Status: {sensor_data['status']}")
         else:
             print(f"[{SENSOR_ID}] Gagal publish data, error code: {result.rc}")
         
@@ -133,5 +223,4 @@ except Exception as e:
     client.loop_stop()
     client.disconnect()
     sys.exit(1)
-    print("Dashboard Service is running.")
     

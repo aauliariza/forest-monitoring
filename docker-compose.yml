@@ -48,6 +48,8 @@ services:
         condition: service_healthy
       broker:
         condition: service_started
+    env_file:
+      - .env
     environment:
       DATABASE_URL: "postgresql://admin:password123@db:5432/forest_db"
       MQTT_BROKER_HOST: "broker"
@@ -57,53 +59,56 @@ services:
     restart: unless-stopped
 
   # 4. Sensor Nodes (Publishers)
-  # Sensor Node 1 - Sektor 1A
-  sensor_node_1:
+  # Sensor Node 1 - Temperature Sensor
+  sensor_temperature:
     build:
       context: ./sensor_node
       dockerfile: Dockerfile
-    container_name: sensor-area-01
+    container_name: sensor-temperature
     depends_on:
       - broker
     environment:
       MQTT_BROKER_HOST: "broker"
-      SENSOR_ID: "sensor-area-01"
-      LOCATION: "Sektor 1A"
-      SAMPLE_INTERVAL: "3"
+      SENSOR_ID: "temp-01"
+      SENSOR_TYPE: "temperature"
+      LOCATION: "Hutan Lindung Area 1"
+      SAMPLE_INTERVAL: "10"
     networks:
       - forest-network
     restart: unless-stopped
 
-  # Sensor Node 2 - Sektor 2B
-  sensor_node_2:
+  # Sensor Node 2 - Humidity Sensor
+  sensor_humidity:
     build:
       context: ./sensor_node
       dockerfile: Dockerfile
-    container_name: sensor-area-02
+    container_name: sensor-humidity
     depends_on:
       - broker
     environment:
       MQTT_BROKER_HOST: "broker"
-      SENSOR_ID: "sensor-area-02"
-      LOCATION: "Sektor 2B"
-      SAMPLE_INTERVAL: "3"
+      SENSOR_ID: "hum-01"
+      SENSOR_TYPE: "humidity"
+      LOCATION: "Hutan Lindung Area 1"
+      SAMPLE_INTERVAL: "10"
     networks:
       - forest-network
     restart: unless-stopped
 
-  # Sensor Node 3 - Pos Pantau 3
-  sensor_node_3:
+  # Sensor Node 3 - Smoke Sensor
+  sensor_smoke:
     build:
       context: ./sensor_node
       dockerfile: Dockerfile
-    container_name: sensor-area-03
+    container_name: sensor-smoke
     depends_on:
       - broker
     environment:
       MQTT_BROKER_HOST: "broker"
-      SENSOR_ID: "sensor-area-03"
-      LOCATION: "Pos Pantau 3"
-      SAMPLE_INTERVAL: "3"
+      SENSOR_ID: "smoke-01"
+      SENSOR_TYPE: "smoke"
+      LOCATION: "Hutan Lindung Area 1"
+      SAMPLE_INTERVAL: "10"
     networks:
       - forest-network
     restart: unless-stopped

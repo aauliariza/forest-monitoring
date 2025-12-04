@@ -45,12 +45,12 @@ class TelemetryReading(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     node_id = Column(Integer, ForeignKey("sensor_nodes.id"))
+    sensor_type = Column(String)  # temperature, humidity, smoke
     timestamp = Column(DateTime)
-    temperature = Column(Float)
-    humidity = Column(Float)
-    smoke = Column(Float)
+    temperature = Column(Float, nullable=True)
+    humidity = Column(Float, nullable=True)
+    smoke = Column(Float, nullable=True)
     status = Column(String)
-    
     node = relationship("SensorNode", back_populates="readings")
 
 # Buat tabel jika belum ada
@@ -93,6 +93,10 @@ manager = ConnectionManager()
 mqtt_client = None
 latest_data = {}
 
+# Thresholds for smoke (can be adjusted via env vars)
+SMOKE_WARNING = int(os.getenv('SMOKE_WARNING', '300'))
+SMOKE_DANGER = int(os.getenv('SMOKE_DANG', '600'))
+
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print(f"[Dashboard Service] Terhubung ke broker MQTT")
@@ -111,9 +115,20 @@ def on_message(client, userdata, message):
         
         # Update latest data untuk WebSocket
         latest_data[payload['sensor_id']] = payload
-        
+
+        # Compute combined area status from latest readings
+        area_status, area_values = compute_combined_status()
+
+        # Prepare broadcast payload: include original payload and area status/values
+        broadcast_payload = {
+            "type": "telemetry",
+            "payload": payload,
+            "area_status": area_status,
+            "area_values": area_values
+        }
+
         # Broadcast ke WebSocket clients (non-blocking)
-        asyncio.run(manager.broadcast(payload))
+        asyncio.run(manager.broadcast(broadcast_payload))
         
     except Exception as e:
         print(f"[Dashboard Service] Error memproses pesan: {e}")
@@ -136,15 +151,18 @@ def save_to_database(payload):
             db.commit()
             db.refresh(sensor)
         
-        # Simpan reading
-        reading = TelemetryReading(
-            node_id=sensor.id,
-            timestamp=datetime.strptime(payload['timestamp'], "%Y-%m-%dT%H:%M:%SZ"),
-            temperature=payload['data']['temperature'],
-            humidity=payload['data']['humidity'],
-            smoke=payload['data']['smoke'],
-            status=payload.get('status', 'unknown')
-        )
+        # Simpan reading dengan data yang relevan sesuai sensor_type
+        reading_data = {
+            "node_id": sensor.id,
+            "sensor_type": payload.get('sensor_type', 'unknown'),
+            "timestamp": datetime.strptime(payload['timestamp'], "%Y-%m-%dT%H:%M:%SZ"),
+            "status": payload.get('status', 'unknown'),
+            "temperature": payload['data'].get('temperature'),
+            "humidity": payload['data'].get('humidity'),
+            "smoke": payload['data'].get('smoke')
+        }
+        
+        reading = TelemetryReading(**reading_data)
         db.add(reading)
         db.commit()
         
@@ -153,6 +171,61 @@ def save_to_database(payload):
         db.rollback()
     finally:
         db.close()
+
+
+def compute_combined_status():
+    """Compute combined status using latest_data values.
+
+    Rules (as provided):
+    if (S >= S_dang) then DANGER
+    else if (T >= 35 and H < 40) then DANGER
+    else if (S >= S_warn and S < S_dang) then WARNING
+    else if (T >= 30 and T < 35 and H >= 40 and H < 70) then WARNING
+    else NORMAL
+    """
+    # Gather latest values
+    T = None
+    H = None
+    S = None
+    latest_timestamp = None
+
+    for sensor_id, p in latest_data.items():
+        data = p.get('data', {})
+        if 'temperature' in data and data['temperature'] is not None:
+            T = float(data['temperature'])
+            latest_timestamp = p.get('timestamp', latest_timestamp)
+        if 'humidity' in data and data['humidity'] is not None:
+            H = float(data['humidity'])
+            latest_timestamp = p.get('timestamp', latest_timestamp)
+        if 'smoke' in data and data['smoke'] is not None:
+            S = float(data['smoke'])
+            latest_timestamp = p.get('timestamp', latest_timestamp)
+
+    # Default status
+    status = 'NORMAL'
+
+    try:
+        if S is not None and S >= SMOKE_DANGER:
+            status = 'DANGER'
+        elif T is not None and H is not None and (T >= 35 and H < 40):
+            status = 'DANGER'
+        elif S is not None and S >= SMOKE_WARNING and S < SMOKE_DANGER:
+            status = 'WARNING'
+        elif T is not None and (T >= 30 and T < 35) and H is not None and (H >= 40 and H < 70):
+            status = 'WARNING'
+        else:
+            status = 'NORMAL'
+    except Exception:
+        status = 'NORMAL'
+
+    area_values = {"temperature": T, "humidity": H, "smoke": S, "timestamp": latest_timestamp}
+    return status, area_values
+
+@app.get("/api/status")
+async def get_area_status():
+    """Ambil status area gabungan berdasarkan pembacaan terbaru"""
+    status, values = compute_combined_status()
+    return {"area_status": status, "area_values": values}
 
 def start_mqtt_client():
     """Jalankan MQTT client di background thread"""
@@ -213,15 +286,24 @@ async def get_latest_reading(sensor_id: str):
         if not reading:
             return {"error": "No readings found"}
         
-        return {
+        result = {
             "sensor_id": sensor.sensor_id_string,
             "location": sensor.location,
             "timestamp": reading.timestamp.isoformat(),
-            "temperature": reading.temperature,
-            "humidity": reading.humidity,
-            "smoke": reading.smoke,
-            "status": reading.status
+            "status": reading.status,
+            "sensor_type": reading.sensor_type,
+            "data": {}
         }
+        
+        # Add data fields yang relevan
+        if reading.temperature is not None:
+            result["data"]["temperature"] = reading.temperature
+        if reading.humidity is not None:
+            result["data"]["humidity"] = reading.humidity
+        if reading.smoke is not None:
+            result["data"]["smoke"] = reading.smoke
+        
+        return result
     finally:
         db.close()
 
@@ -239,15 +321,24 @@ async def get_all_latest_readings():
             ).order_by(TelemetryReading.timestamp.desc()).first()
             
             if reading:
-                results.append({
+                result = {
                     "sensor_id": sensor.sensor_id_string,
                     "location": sensor.location,
                     "timestamp": reading.timestamp.isoformat(),
-                    "temperature": reading.temperature,
-                    "humidity": reading.humidity,
-                    "smoke": reading.smoke,
-                    "status": reading.status
-                })
+                    "status": reading.status,
+                    "sensor_type": reading.sensor_type,
+                    "data": {}
+                }
+                
+                # Add data fields yang relevan
+                if reading.temperature is not None:
+                    result["data"]["temperature"] = reading.temperature
+                if reading.humidity is not None:
+                    result["data"]["humidity"] = reading.humidity
+                if reading.smoke is not None:
+                    result["data"]["smoke"] = reading.smoke
+                
+                results.append(result)
         
         return results
     finally:
@@ -262,18 +353,28 @@ async def get_readings_history(limit: int = 100):
             SensorNode
         ).order_by(TelemetryReading.timestamp.desc()).limit(limit).all()
         
-        return [
-            {
+        results = []
+        for reading, sensor in readings:
+            result = {
                 "sensor_id": sensor.sensor_id_string,
                 "location": sensor.location,
                 "timestamp": reading.timestamp.isoformat(),
-                "temperature": reading.temperature,
-                "humidity": reading.humidity,
-                "smoke": reading.smoke,
-                "status": reading.status
+                "status": reading.status,
+                "sensor_type": reading.sensor_type,
+                "data": {}
             }
-            for reading, sensor in readings
-        ]
+            
+            # Add data fields yang relevan
+            if reading.temperature is not None:
+                result["data"]["temperature"] = reading.temperature
+            if reading.humidity is not None:
+                result["data"]["humidity"] = reading.humidity
+            if reading.smoke is not None:
+                result["data"]["smoke"] = reading.smoke
+            
+            results.append(result)
+        
+        return results
     finally:
         db.close()
 

@@ -77,7 +77,7 @@ docker --version      # Harus v20.10+
 docker-compose --version  # Harus v1.29+
 ```
 
-### 📦 Step 1: Clone atau Setup Proyek
+### Step 1: Clone atau Setup Proyek
 
 ```bash
 # Jika menggunakan Git
@@ -88,7 +88,7 @@ cd sister_forest
 cd /path/to/sister_forest
 ```
 
-### 🔧 Step 2: Build dan Jalankan Services
+### Step 2: Build dan Jalankan Services
 
 Untuk menjalankan semua services sekaligus:
 
@@ -111,7 +111,7 @@ Creating sensor-smoke ... done
 Creating web-dashboard ... done
 ```
 
-### 🌐 Step 3: Akses Aplikasi
+### Step 3: Akses Aplikasi
 
 Setelah semua service berjalan, akses melalui:
 
@@ -123,7 +123,7 @@ Setelah semua service berjalan, akses melalui:
 | **Database** | localhost:5432 | PostgreSQL (user: admin, password: password123) |
 | **MQTT Broker** | localhost:1883 | MQTT protocol |
 
-### 🛑 Step 4: Menghentikan Services
+### Step 4: Menghentikan Services
 
 ```bash
 # Stop semua container (data tetap tersimpan)

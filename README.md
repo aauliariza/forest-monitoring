@@ -479,41 +479,6 @@ docker volume rm sister_forest_postgres_data
 docker-compose up -d
 ```
 
-## 🎯 Skenario Demonstrasi
-
-### Demo 1: Monitoring Real-time
-
-1. Buka 2 terminal
-2. Terminal 1: `docker-compose logs -f`
-3. Terminal 2: Buka http://localhost:3000
-4. Lihat data sensor update setiap 3 detik di dashboard dan logs
-
-### Demo 2: Fault Tolerance
-
-1. Buka http://localhost:3000
-2. Stop sensor temperature: `docker-compose stop sensor-temperature`
-3. Lihat di dashboard: hanya 2 sensor yang update
-4. Restart sensor: `docker-compose start sensor-temperature`
-5. Sensor kembali mengirim data
-
-### Demo 3: Data Persistence
-
-1. Jalankan sistem 2-3 menit
-2. Stop semua: `docker-compose down`
-3. Start kembali: `docker-compose up -d`
-4. Buka dashboard: data historis masih ada!
-
-### Demo 4: API Testing
-
-```bash
-# Terminal 1
-docker-compose up -d
-
-# Terminal 2
-# Query API setiap 5 detik
-watch -n 5 'curl -s http://localhost:8000/api/readings/latest | jq'
-```
-
 ## 📚 Teknologi Stack
 
 | Komponen | Teknologi | Versi |
@@ -528,25 +493,17 @@ watch -n 5 'curl -s http://localhost:8000/api/readings/latest | jq'
 ## 🎓 Konsep yang Dipelajari
 
 ✅ **Event-Driven Architecture** - Publish-Subscribe pattern dengan MQTT
+
 ✅ **Microservices** - Setiap komponen independent dan scalable
+
 ✅ **Real-time Communication** - MQTT dan WebSocket
+
 ✅ **Data Persistence** - PostgreSQL dengan Docker volumes
+
 ✅ **API Design** - REST API dengan FastAPI
+
 ✅ **Frontend** - Vanilla JavaScript dengan Chart.js
+
 ✅ **Containerization** - Docker untuk reproducibility
+
 ✅ **System Reliability** - Auto-reconnect dan error handling
-
-## 📞 Support & Questions
-
-Jika ada pertanyaan atau issue:
-1. Cek troubleshooting section di atas
-2. Lihat Docker logs untuk error messages
-3. Baca dokumentasi di Laporan_Proyek.md
-
-## 📄 Lisensi
-
-Proyek edukasi untuk mata kuliah Sistem Terdistribusi.
-
----
-
-**🚀 Happy Monitoring! Sistem Anda sudah siap dijalankan.**
